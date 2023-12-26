@@ -15,7 +15,9 @@ use std::{
     thread::sleep,
     time::Duration,
 };
+use embedded_svc::http::server::HandlerResult;
 use wifi::wifi;
+use serde::Serialize;
 
 #[toml_cfg::toml_config]
 pub struct Config {
@@ -23,6 +25,12 @@ pub struct Config {
     wifi_ssid: &'static str,
     #[default("")]
     wifi_psk: &'static str,
+}
+
+#[derive(Serialize)]
+struct SensorData {
+    temperature: f32,
+    humidity: f32,
 }
 
 fn main() -> Result<()> {
@@ -58,15 +66,40 @@ fn main() -> Result<()> {
         .unwrap();
 
     // 1.Create a `EspHttpServer` instance using a default configuration
-    // let mut server = EspHttpServer::new(...)?;
+    let configuration = Configuration::default();
+    let mut server = EspHttpServer::new(&configuration)?;
 
     // 2. Write a handler that returns the index page
-    // server.fn_handler("/", Method::Get, |request| {
-    // ...
-    //})?;
+    server.fn_handler("/", Method::Get, |request| {
+        let html = index_html();
+        let mut resp = request.into_ok_response()?;
+        resp.write(html.as_bytes())?;
+        Ok(())
+    })?;
+
+    server.fn_handler("/sensors", Method::Get, |request| {
+
+        let mut temp_sensor = temp_sensor_main.clone();
+        temp_sensor
+            .lock()
+            .unwrap()
+            .start_measurement(PowerMode::NormalMode)
+            .unwrap();
+        let res = temp_sensor.lock().unwrap().get_measurement_result()?;
+        let data = SensorData {
+            temperature: res.temperature.as_degrees_celsius(),
+            humidity: res.humidity.as_percent(),
+        };
+        let json_data = serde_json::to_string(&data).unwrap();
+        let mut resp = request.into_ok_response()?;
+        resp.write(json_data.as_bytes())?;
+        Ok(())
+
+    })?;
 
     // This is not true until you actually create one
-    println!("Server awaiting connection");
+    let ip_res = _wifi.sta_netif();
+    println!("Server awaiting connection on:\nIP {}\nHost {}\n{:?}", ip_res.get_ip_info()?.ip, ip_res.get_hostname()?, ip_res );
 
     // Prevent program from exiting
     loop {
