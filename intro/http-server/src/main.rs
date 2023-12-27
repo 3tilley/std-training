@@ -97,6 +97,19 @@ fn main() -> Result<()> {
 
     })?;
 
+    server.fn_handler("/sensors_fake", Method::Get, |request| {
+
+        let data = SensorData {
+            temperature: 30f32,
+            humidity: 50f32,
+        };
+        let json_data = serde_json::to_string(&data).unwrap();
+        let mut resp = request.into_ok_response()?;
+        resp.write(json_data.as_bytes())?;
+        Ok(())
+
+    })?;
+
     // This is not true until you actually create one
     let ip_res = _wifi.sta_netif();
     println!("Server awaiting connection on:\nIP {}\nHost {}\n{:?}", ip_res.get_ip_info()?.ip, ip_res.get_hostname()?, ip_res );
